@@ -1,169 +1,140 @@
-// import { Link } from 'expo-router';
-// import React, { useState } from 'react';
-// import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
-// export default function SignupScreen() {
-//   const [email, setEmail] = useState('');
-//   const [password, setPassword] = useState('');
-
-//   const handleSignup = () => {
-//     console.log('Sign Up:', email, password);
-//   };
-
-//   return (
-//     <View style={styles.container}>
-//       <Text style={styles.heading}>Sign Up</Text>
-//       <TextInput placeholder="Email" style={styles.input} value={email} onChangeText={setEmail} />
-//       <TextInput
-//         placeholder="Password"
-//         secureTextEntry
-//         style={styles.input}
-//         value={password}
-//         onChangeText={setPassword}
-//       />
-//       <TouchableOpacity style={styles.button} onPress={handleSignup}>
-//         <Text style={styles.buttonText}>Sign Up</Text>
-//       </TouchableOpacity>
-
-//       <Link  href={'/(auth)/login'} style={{marginTop:20}}>
-//         <Text style={styles.linkText}>Already have an account? Log in</Text>
-//       </Link>
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: { flex: 1, justifyContent: 'center', padding: 20 },
-//   heading: { fontSize: 28, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-//   input: { borderWidth: 1, borderColor: '#ccc', padding: 12, borderRadius: 8, marginBottom: 10 },
-//   button: { backgroundColor: '#28A745', padding: 15, borderRadius: 8 },
-//   buttonText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
-//   linkText: { marginTop: 15, color: '#007AFF', textAlign: 'center' },
-// });
-
-
-
+import { auth } from '@/config';
+import { saveLocalUser } from '@/persistents';
 import { User } from '@/utils/user';
 import { Asset } from 'expo-asset';
+import { makeRedirectUri } from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import React, { FunctionComponent, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Alert, Dimensions, Image, ImageBackground, Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { Alert, Dimensions, Image, ImageBackground, Keyboard, Modal, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 
-WebBrowser.maybeCompleteAuthSession()
+WebBrowser.maybeCompleteAuthSession();
 
-const Signup = () => {
-  // const { isLoading: isEmailSigninLoading, isError: isEmailSigninError, error: emailSigninError, mutateAsync: emailSigninMutation } = useEmailSigninMutation(false)
-
-  // const { isLoading: isEmailSignupLoading, isError: isEmailSignupError, error: emailSignupError, mutateAsync: emailSignupMutation } = useEmailSignupMutation(false)
-  // const { isLoading: isGoogleSignupLoading, isError: isGoogleSignupError, error: googleSignupError, mutateAsync: googleSignupMutation } = useGoogleSignupMutation()
-
-  // const { mutateAsync: sendotp, error: otperr, isLoading: sendotploading } = useSendOTPMutation()
-  // const { mutateAsync: verifyotp,error:verifyotperr, isError:isverifyotperr } = useVerifyOTPMutation()
-  const { handleSubmit, watch, formState: { errors }, control } = useForm<User>();
+const Signup: FunctionComponent = () => {
+  const { handleSubmit, formState: { errors }, control } = useForm<User>();
   const [isOtpModalVisible, setOtpModalVisible] = useState(false);
-  const [emailToVerify, setEmailToVerify] = useState('');
-  const [userExist, setUserExist] = useState(false);
-  const user = watch()
+  const [_userExist, setUserExist] = useState(false);
+  const [pendingUser, setPendingUser] = useState<User | null>(null);
 
-  // const [_request, response, promptAsync] = Google.useAuthRequest({
-  //   webClientId: '522585345584-5eogmt9juv74frkjndmhq4i5ob3ah68g.apps.googleusercontent.com',
-  //   androidClientId: '522585345584-mb227ovhe4v1dr9b2g2fbrum5j6av682.apps.googleusercontent.com',
-  //   iosClientId: '522585345584-t7rrclh3kf4cd3jkh0ibluavpd6tf74e.apps.googleusercontent.com',
-  //   scopes: [
-  //     "profile",
-  //     "email"
-  //   ],
-  //   responseType: 'code',
-  //   redirectUri: makeRedirectUri({
-  //     native: 'com.anonymous.testexpoapp:/signup',
-  //   })
-  // })
 
-  // useEffect(() => {
-  //   if (response?.type === 'success') {
-  //     handleSignupWithGoogle();
-  //   } else if (response?.type === 'error') {
-  //     console.log('Signup failed:', response?.error);
-  //     router.navigate('/signup')
-  //   }
-  // }, [response])
+  const [request, _response, promptAsync] = Google.useAuthRequest({
+    webClientId:process.env.WEB_CLIENT_ID||"",
+    androidClientId: process.env.ANDROID_CLIENT_ID||"",
+    iosClientId: process.env.IOS_CLIENT_ID||"",
+    scopes: [
+      "profile",
+      "email"
+    ],
+    responseType: 'code',
+     redirectUri: makeRedirectUri({
+      native: 'com.anonymous.myFlight360:/signup',
+    })
+  })
 
-  // async function handleSignupWithGoogle() {
-  //   if (response?.type === 'success') {
-  //     await googleSignupMutation(response.authentication?.accessToken || '')
-  //     router.navigate('/')
-  //   }
-  // }
 
+  
   const image = Asset.fromModule(require('../assets/images/login-image.png')).uri;
-  const handleSignout = async () => {
+
+  const handleSignup = async (data: User) => {
     try {
-      // await emailSigninMutation({
-      //   email: user.email,
-      //   password:"", // password no matter, we need it for hash backend
-      //   userName: ''  // username dont need for login purpose
-      // });
-    } catch (error) {
-      throw new Error("error on login:")
+      const { userName, email, password } = data;
+      console.log('Attempting signup with:', { email, userName });
+
+        await saveLocalUser({ userName: data.userName || "", email: data.email, password: data.password });
+        Alert.alert('Successfully user has registered!');
+        router.push('/login')
+
+
+      // const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // const user = userCredential.user;
+      // console.log('User created:', user.uid);
+
+      // await updateProfile(user, { displayName: userName });
+      // setPendingUser({ userName, email, password, uid: user.uid });
+      // await sendEmailVerification(user);
+      // setOtpModalVisible(true);
+      // Alert.alert('Success', 'Verification email sent. Please check your inbox and click the link.');
+    } catch (error: any) {
+      console.error('Signup error:', JSON.stringify(error, null, 2));
+      let errorMessage = '';
+      if (error.code === 'auth/email-already-in-use') {
+        setUserExist(true);
+        errorMessage = 'Email already in use. Please use a different email or log in.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email format.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak. Use at least 6 characters.';
+      } else if (error.code === 'auth/network-request-failed') {
+        try {
+          await saveLocalUser({ userName: data.userName || "", email: data.email, password: data.password });
+          Alert.alert('Successfully user has registered!');
+        } catch (localError) {
+          errorMessage = 'Network error and failed to save locally. Please check your connection and try again.';
+        }
+      }
     }
-  }
+  };
 
-  // useEffect(() => {
-  //   setUserExist(false)
-  //   if (emailSigninError?.response?.status == 404) {
-  //     setEmailToVerify(user.email);
-  //     sendotp({
-  //       email: user.email,
-  //       accountVerification: true,
-  //       type: 'verification',
-  //       userName: undefined
-  //     });
-  //     setOtpModalVisible(true)
-  //   }
-  //   if (emailSigninError?.response?.status==401) {  //authentication error, only happen if user exist
-  //     setUserExist(true)
-  //   }
-  // }, [emailSigninError])
+  const handleVerifyOtp = async (otp: string) => {
+    try {
+      if (!pendingUser) throw new Error('No pending user found.');
+      const user = auth.currentUser;
+      if (user) {
+        await user.reload();
+        if (user.emailVerified) {
+          setOtpModalVisible(false);
+          Alert.alert('Success', 'Email verified! You are now signed up.');
+          router.navigate('/home');
+        } else {
+          Alert.alert('Error', 'Email not verified. Please click the verification link in your email.');
+        }
+      } else {
+        throw new Error('User session expired. Please sign up again.');
+      }
+    } catch (error: any) {
+      console.error('OTP verification error:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', error.message || 'Failed to verify OTP. Please try again.');
+    }
+  };
 
-  // useEffect(()=>{
-  //   if (isverifyotperr && verifyotperr?.response?.status === 400) {
-  //     Alert.alert('Error', 'Invalid OTP. Please try again.');
-  //   } 
-  // },[verifyotperr])
-
-
-  async function handleVerifyOtp(otp: string) {
-    // try {
-    //   await verifyotp({ email: emailToVerify, otp });
-    //   await emailSignupMutation({
-    //     email: emailToVerify,
-    //     userName: user.userName,
-    //     password: user.password,
-    //   });
-    //   Alert.alert('Success', 'Account created successfully!');
-    //   setOtpModalVisible(false);
-    //   router.navigate('/');
-    // } catch (error) {
-    //   console.log("error on verify otp:", error);
-    //   if (emailSignupError){
-    //     Alert.alert('Sorry', emailSignupError?.response?.data.message || emailSignupError?.message);
-    //   }
-    // }
-  }
+  const handleGoogleSignIn = async () => {
+    try {
+      if (!request) {
+        console.error('Auth request not initialized');
+        Alert.alert('Error', 'Google sign-in is not ready. Please try again.');
+        return;
+      }
+      console.log('Initiating Google sign-in...');
+      const result = await promptAsync();
+      console.log('Google auth result:', JSON.stringify(result, null, 2));
+      if (result.type === 'success') {
+        const { id_token } = result.params;
+        const credential = GoogleAuthProvider.credential(id_token);
+        const userCredential = await signInWithCredential(auth, credential);
+        const user = userCredential.user;
+        Alert.alert('Success', `Signed in as ${user.displayName || 'Google user'}`);
+        router.navigate('/home');
+      } else {
+        throw new Error('Google sign-in cancelled.');
+      }
+    } catch (error: any) {
+      console.error('Google sign-in error:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', error.message || 'Failed to sign in with Google.');
+    }
+  };
 
   const navigateToLogin = () => {
-    router.push('/login')
-
+    router.push('/login');
   };
 
   return (
     <ImageBackground source={{ uri: image }} style={styles.backgroundImage}>
       <LinearGradient colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']} style={styles.gradient}>
         <View style={styles.container}>
-
           <OtpModal
             visible={isOtpModalVisible}
             onClose={() => setOtpModalVisible(false)}
@@ -173,19 +144,9 @@ const Signup = () => {
           <Image source={{ uri: image }} style={styles.image} onError={e => console.log(e.nativeEvent.error)} />
           <Text style={styles.title}>Register your account</Text>
 
-          {/* {(isEmailSignupLoading || isEmailSigninLoading || sendotploading || isGoogleSignupLoading) &&
-            <LoadingWidget/>
-          }
-          <Text style={styles.errorText}>
-            {isEmailSignupError && emailSignupError.response?.data.message
-              || emailSignupError?.message}</Text>
-          
-          {userExist && <Text style={styles.errorText}>User Already Exist!</Text>}
-          {googleSignupError && <Text style={styles.errorText}>{googleSignupError.response?.data.message || googleSignupError.message}</Text>} */}
-
           <Controller
             control={control}
-            name='userName'
+            name="userName"
             rules={{ required: 'Username is required' }}
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
@@ -195,7 +156,7 @@ const Signup = () => {
                 onBlur={onBlur}
                 onChangeText={e => onChange(e.toLowerCase())}
                 value={value}
-                textContentType='username'
+                textContentType="username"
               />
             )}
           />
@@ -213,16 +174,16 @@ const Signup = () => {
                 onBlur={onBlur}
                 onChangeText={e => onChange(e.toLowerCase())}
                 value={value}
-                textContentType='emailAddress'
+                textContentType="emailAddress"
               />
             )}
           />
-          {errors.email && <Text style={styles.errorText}>{errors.email.message || (errors.email.type == 'pattern' && 'Please Enter a valid Email Address!')}</Text>}
+          {errors.email && <Text style={styles.errorText}>{errors.email.message || (errors.email.type === 'pattern' && 'Please enter a valid Email Address!')}</Text>}
 
           <Controller
             control={control}
             name="password"
-            rules={{ required: 'Password is required' }}
+            rules={{ required: 'Password is required', minLength: { value: 6, message: 'Password must be at least 6 characters' } }}
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
                 style={styles.input}
@@ -237,17 +198,13 @@ const Signup = () => {
           />
           {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
 
-          <TouchableOpacity onPress={handleSubmit(handleSignout)} style={styles.button}>
+          <TouchableOpacity onPress={handleSubmit(handleSignup)} style={styles.button}>
             <Text style={styles.buttonText}>Signup</Text>
           </TouchableOpacity>
 
           <View style={styles.signInOptionsContainer}>
             <Text style={styles.note}>Or sign up using</Text>
-            <TouchableOpacity style={styles.googleButton} onPress={async ()=>{
-              setUserExist(false)
-              // await promptAsync()
-              
-              }}>
+            <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={!request}>
               <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/128/281/281764.png' }} style={styles.googleIcon} />
               <Text style={styles.googleButtonText}>Google</Text>
             </TouchableOpacity>
@@ -263,9 +220,54 @@ const Signup = () => {
       </LinearGradient>
     </ImageBackground>
   );
-}
+};
 
-export default Signup
+const OtpModal: FunctionComponent<{ visible: boolean; onClose: () => void; onSubmit: (otp: string) => void }> = ({ visible, onClose, onSubmit }) => {
+  const [otp, setOtp] = useState('');
+
+  const handleSubmit = () => {
+    if (otp.length === 6) {
+      onSubmit(otp);
+    } else {
+      Alert.alert('Invalid OTP', 'Please enter a valid 6-digit OTP.');
+    }
+  };
+
+  return (
+    <Modal
+      transparent={true}
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={stylesOtpModal.overlay}>
+          <LinearGradient colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']} style={stylesOtpModal.container}>
+            <Text style={stylesOtpModal.title}>Enter OTP</Text>
+            <Text style={stylesOtpModal.subtitle}>We have sent a verification link to your email. Please click the link to verify.</Text>
+            <TextInput
+              style={stylesOtpModal.input}
+              placeholder="Enter OTP (if needed)"
+              placeholderTextColor="#777777"
+              keyboardType="numeric"
+              maxLength={6}
+              value={otp}
+              onChangeText={setOtp}
+            />
+            <TouchableOpacity onPress={handleSubmit} style={stylesOtpModal.button}>
+              <Text style={stylesOtpModal.buttonText}>Verify</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={stylesOtpModal.closeButton}>
+              <Text style={stylesOtpModal.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+};
+
+const { width } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   backgroundImage: {
@@ -279,7 +281,7 @@ const styles = StyleSheet.create({
     width: 150,
     height: 125,
     transform: 'rotate(14deg)',
-    resizeMode: 'contain'
+    resizeMode: 'contain',
   },
   gradient: {
     flex: 1,
@@ -310,14 +312,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     paddingHorizontal: 15,
     marginBottom: 15,
-    fontFamily: 'Roboto',
-  },
-  forgotPasswordContainer: {
-    alignSelf: 'flex-end',
-    marginBottom: 20,
-  },
-  forgotPassword: {
-    color: '#007BFF',
     fontFamily: 'Roboto',
   },
   button: {
@@ -366,7 +360,7 @@ const styles = StyleSheet.create({
   signUpText: {
     color: '#777777',
     fontFamily: 'Roboto',
-    marginVertical: 10
+    marginVertical: 10,
   },
   signUpLink: {
     color: '#007BFF',
@@ -375,102 +369,19 @@ const styles = StyleSheet.create({
     color: 'red',
     marginTop: -10,
     marginBottom: 10,
-    textAlign: 'left'
-  },
-  modalContainer: {
-    flex: 1,
-    width: 'auto',
-    height: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  modalTitle: {
-    fontSize: 24,
-    marginBottom: 20,
-    color: 'black',
-  },
-  otpInput: {
-    width: 200,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: 'black',
-    borderRadius: 5,
-    color: 'black',
-    backgroundColor: 'white',
-    marginBottom: 20,
-  },
-  modalButton: {
-    padding: 10,
-    backgroundColor: '#007BFF',
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  modalButtonText: {
-    color: 'white'
+    textAlign: 'left',
   },
 });
-
-const { height, width } = Dimensions.get('window');
-
-import { Modal } from 'react-native';
-
-const OtpModal: FunctionComponent<{ visible: boolean, onClose: () => void, onSubmit: (otp: string) => void }> = ({ visible, onClose, onSubmit }) => {
-  const [otp, setOtp] = useState('');
-  const [err,setErr]=useState('')
-
-  const handleSubmit = () => {
-    if (otp.length === 6) { // Assuming OTP is 6 digits
-      onSubmit(otp);
-    } else {
-      Alert.alert('Invalid OTP', 'Please enter a valid 6-digit OTP.');
-    }
-  };
-
-  return (
-    <Modal
-    transparent={true}
-    animationType="fade"
-    visible={visible}
-    onRequestClose={onClose}
-  >
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={stylesOtpModal.overlay}>
-        <LinearGradient colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']} style={stylesOtpModal.container}>
-          <Text style={stylesOtpModal.title}>Enter OTP</Text>
-          <Text style={stylesOtpModal.subtitle}>We have sent an OTP to your email. Please enter it below.</Text>
-          <TextInput
-            style={stylesOtpModal.input}
-            placeholder="Enter OTP"
-            placeholderTextColor="#777777"
-            keyboardType="numeric"
-            maxLength={6}
-            value={otp}
-            onChangeText={setOtp}
-          />
-          <TouchableOpacity onPress={handleSubmit} style={stylesOtpModal.button}>
-            <Text style={stylesOtpModal.buttonText}>Verify</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={stylesOtpModal.closeButton}>
-            <Text style={stylesOtpModal.closeButtonText}>Cancel</Text>
-          </TouchableOpacity>
-        </LinearGradient>
-      </View>
-    </TouchableWithoutFeedback>
-  </Modal>
-  );
-};
-
 
 const stylesOtpModal = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', 
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   container: {
-    width: width * 0.8, 
+    width: width * 0.8,
     padding: 20,
     borderRadius: 10,
     alignItems: 'center',
@@ -498,7 +409,7 @@ const stylesOtpModal = StyleSheet.create({
     marginBottom: 20,
   },
   button: {
-    backgroundColor: '#007BFF', // Button color
+    backgroundColor: '#007BFF',
     paddingVertical: 12,
     paddingHorizontal: 25,
     borderRadius: 5,
@@ -515,4 +426,6 @@ const stylesOtpModal = StyleSheet.create({
     color: 'white',
     textDecorationLine: 'underline',
   },
-})
+});
+
+export default Signup;

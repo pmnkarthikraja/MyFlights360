@@ -1,155 +1,137 @@
-// import { Link } from 'expo-router';
-// import React, { useState } from 'react';
-// import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
-// export default function LoginScreen() {
-//   const [email, setEmail] = useState('');
-//   const [password, setPassword] = useState('');
-
-//   const handleLogin = () => {
-//     console.log('Login:', email, password);
-//     // TODO: Implement Firebase login here
-//   };
-
-//   return (
-//     <View style={styles.container}>
-//       <Text style={styles.heading}>Login</Text>
-//       <TextInput placeholder="Email" style={styles.input} value={email} onChangeText={setEmail} />
-//       <TextInput
-//         placeholder="Password"
-//         secureTextEntry
-//         style={styles.input}
-//         value={password}
-//         onChangeText={setPassword}
-//       />
-//       <TouchableOpacity style={styles.button} onPress={handleLogin}>
-//         <Text style={styles.buttonText}>Log In</Text>
-//       </TouchableOpacity>
-
-//       <Link href={'/(auth)/signup'} style={{
-//         marginTop:20
-//       }}>
-//         <Text style={styles.linkText}>Don't have an account? Sign up</Text>
-//       </Link>
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: { flex: 1, justifyContent: 'center', padding: 20 },
-//   heading: { fontSize: 28, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-//   input: { borderWidth: 1, borderColor: '#ccc', padding: 12, borderRadius: 8, marginBottom: 10 },
-//   button: { backgroundColor: '#007AFF', padding: 15, borderRadius: 8 },
-//   buttonText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
-//   linkText: { marginTop: 15, color: '#007AFF', textAlign: 'center' },
-// });
-
+import { findLocalUser } from '@/persistents';
 import { User } from '@/utils/user';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Asset } from 'expo-asset';
+import { makeRedirectUri } from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import React, { FunctionComponent, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Image, ImageBackground, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, ImageBackground, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-WebBrowser.maybeCompleteAuthSession()
+WebBrowser.maybeCompleteAuthSession();
+
+const { width } = Dimensions.get('window');
 
 const Login: FunctionComponent = () => {
-  const [forgotModal, setForgotModal] = useState(false)
-  // const { isLoading: isEmailSigninLoading, isError: isEmailSigninError, error: emailSigninError, isSuccess: isEmailSigninSuccess, mutateAsync: emailSigninMutation,reset:emailsigninreset } = useEmailSigninMutation(false)
-  // const { isLoading: isGoogleSigninLoading, isError: isGoogleSigninError, error: googleSigninError, mutateAsync: googleSigninMutation, reset:googlesigninreset } = useGoogleSigninMutation()
-  // const [_request, response, promptAsync] = Google.useAuthRequest({
-  //   webClientId: '522585345584-5eogmt9juv74frkjndmhq4i5ob3ah68g.apps.googleusercontent.com',
-  //   androidClientId: '522585345584-mb227ovhe4v1dr9b2g2fbrum5j6av682.apps.googleusercontent.com',
-  //   iosClientId: '522585345584-t7rrclh3kf4cd3jkh0ibluavpd6tf74e.apps.googleusercontent.com',
-  //   scopes: [
-  //     "profile",
-  //     "email"
-  //   ],
-  //   responseType: 'code',
-  //   redirectUri: makeRedirectUri({
-  //     native: 'com.anonymous.testexpoapp:/login',
-  //   })
-  // })
-
+  const [forgotModal, setForgotModal] = useState(false);
   const { handleSubmit, watch, formState: { errors }, control } = useForm<User>();
 
-  const triggerForgotModal = () => {
-    setForgotModal(r => !r)
-  }
-
-  // useEffect(() => {
-  //   if (response?.type === 'success') {
-  //     handleSigninWithGoogle();
-  //   } else if (response?.type === 'error') {
-  //     console.log('Login failed:', response?.error);
-  //     router.navigate('/login')
-  //   }
-  // }, [response])
-
-
-  // async function handleSigninWithGoogle() {
-  //   if (response?.type === 'success') {
-  //     await getUserInfo(response.authentication?.accessToken || '')
-  //   }
-  // }
-
-  interface GoogleUser {
-    id: string,
-    email: string,
-    name: string,
-    picture: string
-  }
-
-  const getUserInfo = async (token: string) => {
-    if (!token) return
-    try {
-      const response = await fetch("https://www.googleapis.com/userinfo/v2/me", {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      const user: GoogleUser = await response.json()
-      // await googleSigninMutation({
-      //   email: user.email,
-      //   googleId: user.id
-      // })
-    } catch (e) {
-      console.log("error on getting profile on google.", e)
-      router.navigate('/login')
-    }
-  }
+  const [request, _response, promptAsync] = Google.useAuthRequest({
+    webClientId:process.env.WEB_CLIENT_ID||"",
+    androidClientId: process.env.ANDROID_CLIENT_ID||"",
+    iosClientId: process.env.IOS_CLIENT_ID||"",
+    scopes: [
+      "profile",
+      "email"
+    ],
+    responseType: 'code',
+     redirectUri: makeRedirectUri({
+      native: 'com.anonymous.myFlight360:/login',
+    })
+  })
 
   const image = Asset.fromModule(require('../assets/images/login-image.png')).uri;
-  //on mobile, raw path is not working. thats why we're giving this.ßß
-  const handleForgotPassword = () => {
-    setForgotModal(true)
+
+  const signInQuery = async (data: User) => {
+    try {
+      const { email, password } = data;
+      console.log('Attempting login with:', { email });
+
+      // checkingg local storage
+      const localUser = await findLocalUser(email, password,true);
+      if (localUser) {
+        console.log('Local user found:', localUser.uid);
+        await AsyncStorage.setItem('currentUserEmail', email); //keep login session
+        Alert.alert('Success', `Logged in as ${localUser.userName}`);
+        router.navigate('/home');
+        return;
+      }
+
+      // If no local user, inform user to sign up
+      throw new Error('No account found. Please sign up first.');
+    } catch (error: any) {
+      console.error('Login error:', JSON.stringify(error, null, 2));
+      let errorMessage = 'Failed to log in. Please try again.';
+      if (error.message.includes('No account found')) {
+        errorMessage = 'No account found. Please sign up first.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email format.';
+      }
+      Alert.alert('Error', errorMessage);
+    }
   };
 
-  const signInQuery = async () => {
-    // googlesigninreset()
-    // const data = watch()
-    // await emailSigninMutation(data)
-    router.navigate('/home')
-  }
+  const handleForgotPassword = async (email?: string) => {
+    try {
+      if (!email) {
+        const data = watch();
+        if (!data.email) {
+          throw new Error('Please enter your email in the login form.');
+        }
+        email = data.email;
+      }
+      // since Firebase is unavailable, inform user to sign up again
+      Alert.alert('Info', 'Password reset is unavailable due to network issues. Please sign up with a new account.');
+    } catch (error: any) {
+      console.error('Password reset error:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', error.message || 'Failed to process password reset.');
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await promptAsync()
+      if (!request) {
+        console.error('Auth request not initialized');
+        Alert.alert('Error', 'Google sign-in is not ready. Please try again.');
+        return;
+      }
+      Alert.alert('Info', 'Google sign-in is unavailable due to network issues. Please use local signup/login.');
+    } catch (error: any) {
+      console.error('Google sign-in error:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', error.message || 'Failed to sign in with Google.');
+    }
+  };
 
   const handleSignUp = () => {
-    router.push('/signup')
+    router.push('/signup');
   };
 
   return (
     <ImageBackground source={{ uri: image }} style={styles.backgroundImage}>
-      {/* <ForgotPasswordModal modalVisible={forgotModal} triggerModal={triggerForgotModal} /> */}
       <LinearGradient colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']} style={styles.gradient}>
         <View style={styles.container}>
+          <Modal
+            transparent={true}
+            animationType="fade"
+            visible={forgotModal}
+            onRequestClose={() => setForgotModal(false)}
+          >
+            <View style={stylesModal.overlay}>
+              <LinearGradient colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']} style={stylesModal.container}>
+                <Text style={stylesModal.title}>Reset Password</Text>
+                <Text style={stylesModal.subtitle}>Enter your email to receive a password reset link.</Text>
+                <TextInput
+                  style={stylesModal.input}
+                  placeholder="Email"
+                  placeholderTextColor="#777777"
+                  onChangeText={(text) => watch('email', text)}
+                />
+                <TouchableOpacity onPress={() => handleForgotPassword()} style={stylesModal.button}>
+                  <Text style={stylesModal.buttonText}>Send Reset Link</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setForgotModal(false)} style={stylesModal.closeButton}>
+                  <Text style={stylesModal.closeButtonText}>Cancel</Text>
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+          </Modal>
 
           <Image source={{ uri: image }} style={styles.image} onError={e => console.log(e.nativeEvent.error)} />
           <Text style={styles.title}>Login</Text>
-          {/* {(isEmailSigninLoading || isGoogleSigninLoading) &&
-            <LoadingWidget/>
-          } */}
-          {/* <Text style={styles.errorText}>{isEmailSigninError && emailSigninError.response?.data.message || emailSigninError?.message}</Text> */}
-          {/* <Text style={styles.errorText}>{isGoogleSigninError && googleSigninError.response?.data.message || googleSigninError?.message}</Text> */}
-          
           <Controller
             control={control}
             name="email"
@@ -162,11 +144,11 @@ const Login: FunctionComponent = () => {
                 onBlur={onBlur}
                 onChangeText={e => onChange(e.toLowerCase())}
                 value={value}
-                textContentType='emailAddress'
+                textContentType="emailAddress"
               />
             )}
           />
-          {errors.email && <Text style={styles.errorText}>{errors.email.message || (errors.email.type == 'pattern' && 'Please Enter a valid Email Address!')}</Text>}
+          {errors.email && <Text style={styles.errorText}>{errors.email.message || (errors.email.type === 'pattern' && 'Please enter a valid Email Address!')}</Text>}
 
           <Controller
             control={control}
@@ -186,7 +168,7 @@ const Login: FunctionComponent = () => {
           />
           {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
 
-          <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotPasswordContainer}>
+          <TouchableOpacity onPress={() => setForgotModal(true)} style={styles.forgotPasswordContainer}>
             <Text style={styles.forgotPassword}>Forgot Password?</Text>
           </TouchableOpacity>
 
@@ -194,18 +176,13 @@ const Login: FunctionComponent = () => {
             <Text style={styles.buttonText}>Submit</Text>
           </TouchableOpacity>
 
-          {/* <View style={styles.signInOptionsContainer}>
+          <View style={styles.signInOptionsContainer}>
             <Text style={styles.note}>Or sign in using</Text>
-
-            <TouchableOpacity onPress={async () => {
-              emailsigninreset()
-              await promptAsync()
-              }} style={styles.googleButton}>
+            <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={!request}>
               <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/128/281/281764.png' }} style={styles.googleIcon} />
               <Text style={styles.googleButtonText}>Google</Text>
             </TouchableOpacity>
-            <View style={{ height: 20 }}></View>
-          </View> */}
+          </View>
 
           <View style={styles.signUpContainer}>
             <Text style={styles.signUpText}>Don't have an account?</Text>
@@ -213,16 +190,11 @@ const Login: FunctionComponent = () => {
               <Text style={styles.signUpLink}>Create your account</Text>
             </TouchableOpacity>
           </View>
-
         </View>
-
       </LinearGradient>
     </ImageBackground>
   );
-}
-
-export default Login
-
+};
 
 const styles = StyleSheet.create({
   backgroundImage: {
@@ -236,7 +208,7 @@ const styles = StyleSheet.create({
     width: 150,
     height: 125,
     transform: 'rotate(14deg)',
-    resizeMode: 'contain'
+    resizeMode: 'contain',
   },
   gradient: {
     flex: 1,
@@ -273,12 +245,7 @@ const styles = StyleSheet.create({
     color: 'red',
     marginTop: -10,
     marginBottom: 10,
-    textAlign: 'left'
-  },
-  horizontal: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 10,
+    textAlign: 'left',
   },
   forgotPasswordContainer: {
     alignSelf: 'flex-end',
@@ -334,9 +301,66 @@ const styles = StyleSheet.create({
   signUpText: {
     color: '#777777',
     fontFamily: 'Roboto',
-    marginVertical: 10
+    marginVertical: 10,
   },
   signUpLink: {
     color: '#007BFF',
   },
 });
+
+const stylesModal = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  container: {
+    width: width * 0.8,
+    padding: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 24,
+    color: 'white',
+    marginBottom: 10,
+    fontWeight: 'bold',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: 'white',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  input: {
+    width: '100%',
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'white',
+    borderRadius: 5,
+    color: 'white',
+    marginBottom: 20,
+  },
+  button: {
+    backgroundColor: '#007BFF',
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 5,
+    marginBottom: 10,
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    paddingVertical: 12,
+  },
+  closeButtonText: {
+    color: 'white',
+    textDecorationLine: 'underline',
+  },
+});
+
+export default Login;
